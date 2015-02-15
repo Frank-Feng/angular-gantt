@@ -117,6 +117,7 @@
                                                     <div class="form-group text-center">
                                                         <label class="control-label"><i class="fa fa-magnet"></i> Magnet</label><br>
                                                         <button type="button" style="width: 8em; text-align: left" class="btn btn-default" ng-model="options.columnMagnet" ng-options="m for m in ['column', '1 second', '1 minute', '5 minutes', '15 minutes', '1 hour', '1 day', '5 days']" bs-select></button>
+                                                        <button type="button" class="btn btn-default" ng-model="options.daily" bs-checkbox>Daily</button>
                                                         <button type="button" class="btn btn-default" ng-model="options.timeFramesMagnet" bs-checkbox>TimeFrames</button>
                                                     </div>
 
@@ -211,6 +212,7 @@
                                                data="data"
                                                timespans="timespans"
                                                show-side="options.labelsEnabled"
+                                               daily="options.daily"
                                                filter-task="{'name': options.filterTask}"
                                                filter-row="{'name': options.filterRow}"
                                                sort-mode="options.sortMode"
@@ -253,6 +255,7 @@
                                                 move-threshold="2"
                                                 task-factory="options.drawTaskFactory">
                                             </gantt-draw-task>
+                                            <gantt-resize-sensor></gantt-resize-sensor>
                                         </div>
                                     </div>
                                     <div class="panel-body">
@@ -318,6 +321,8 @@
     <script src="bower_components/angular-ui-tree/dist/angular-ui-tree.js"></script>
     <script src="bower_components/moment/moment.js"></script>
     <script src="bower_components/angular-moment/angular-moment.js"></script>
+    <script src="bower_components/css-element-queries/src/ElementQueries.js"></script>
+    <script src="bower_components/css-element-queries/src/ResizeSensor.js"></script>
     <script src="bower_components/angular-gantt/assets/angular-gantt.js"></script>
     <script src="bower_components/angular-gantt/assets/angular-gantt-plugins.js"></script>
     <!-- endbower -->

@@ -36,6 +36,7 @@
                 this.api.registerEvent('core', 'ready');
                 this.api.registerEvent('core', 'rendered');
 
+                this.api.registerEvent('directives', 'controller');
                 this.api.registerEvent('directives', 'preLink');
                 this.api.registerEvent('directives', 'postLink');
                 this.api.registerEvent('directives', 'new');
@@ -247,6 +248,8 @@
                 var scrollWidth = this.getWidth() - this.side.getWidth();
                 var borderWidth = this.scroll.getBordersWidth();
                 var availableWidth = scrollWidth - (borderWidth !== undefined ? this.scroll.getBordersWidth() : 0);
+                // Remove 1 pixel because of rounding issue in some cases.
+                availableWidth = availableWidth - 1;
                 return availableWidth;
             };
 

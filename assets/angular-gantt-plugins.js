@@ -811,6 +811,65 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
 
 (function(){
+    /* global ResizeSensor: false */
+    /* global ElementQueries: false */
+    'use strict';
+    angular.module('gantt.resizeSensor', ['gantt']).directive('ganttResizeSensor', [function() {
+        return {
+            restrict: 'E',
+            require: '^gantt',
+            scope: {
+                enabled: '=?'
+            },
+            link: function(scope, element, attrs, ganttCtrl) {
+                var api = ganttCtrl.gantt.api;
+
+                // Load options from global options attribute.
+                if (scope.options && typeof(scope.options.progress) === 'object') {
+                    for (var option in scope.options.progress) {
+                        scope[option] = scope.options[option];
+                    }
+                }
+
+                if (scope.enabled === undefined) {
+                    scope.enabled = true;
+                }
+
+                function buildSensor() {
+                    var ganttElement = element.parent().parent().parent()[0].querySelectorAll('div.gantt')[0];
+                    return new ResizeSensor(ganttElement, function() {
+                        ganttCtrl.gantt.$scope.ganttElementWidth = ganttElement.clientWidth;
+                        ganttCtrl.gantt.$scope.$apply();
+                    });
+                }
+
+                api.core.on.rendered(scope, function() {
+                    if (sensor !== undefined) {
+                        sensor.detach();
+                    }
+                    if (scope.enabled) {
+                        ElementQueries.update();
+                        sensor = buildSensor();
+                    }
+                });
+
+                var sensor;
+                scope.$watch('enabled', function(newValue) {
+                    if (newValue && sensor === undefined) {
+                        ElementQueries.update();
+                        sensor = buildSensor();
+                    } else if (!newValue && sensor !== undefined) {
+                        sensor.detach();
+                        sensor = undefined;
+                    }
+                });
+            }
+        };
+    }]);
+}());
+
+
+(function(){
     'use strict';
 
     var moduleName = 'gantt.sortable';
@@ -1956,6 +2015,10 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             $scope.$parent.childrenRows = newValue;
         });
 
+        $scope.isCollapseDisabled = function(){
+            return !$scope.$parent.childrenRows || $scope.$parent.childrenRows.length === 0;
+        };
+
         $scope.getValue = function() {
             return $scope.row.model.name;
         };
@@ -2073,7 +2136,7 @@ angular.module('gantt.labels.templates', []).run(['$templateCache', function($te
         '<div class="gantt-labels-header">\n' +
         '    <div ng-show="gantt.columnsManager.columns.length > 0 && gantt.columnsManager.headers.length > 0">\n' +
         '        <div ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '            <div class="gantt-row-height" ng-class="{\'gantt-labels-header-row\': $last, \'gantt-labels-header-row-last\': $last}"><span class="gantt-label-text">{{$last ? pluginScope.header : ""}}</span></div>\n' +
+        '            <div class="gantt-row-height" ng-class="{\'gantt-labels-header-row\': $last, \'gantt-labels-header-row-last\': $last}"><span>{{$last ? pluginScope.header : ""}}</span></div>\n' +
         '        </div>\n' +
         '    </div>\n' +
         '</div>\n' +
@@ -2098,6 +2161,10 @@ angular.module('gantt.progress.templates', []).run(['$templateCache', function($
         '');
 }]);
 
+angular.module('gantt.resizeSensor.templates', []).run(['$templateCache', function($templateCache) {
+
+}]);
+
 angular.module('gantt.sortable.templates', []).run(['$templateCache', function($templateCache) {
 
 }]);
@@ -2108,11 +2175,9 @@ angular.module('gantt.table.templates', []).run(['$templateCache', function($tem
         '\n' +
         '    <div class="gantt-table-column {{getClass()}}" ng-repeat="column in pluginScope.columns" ng-controller="TableColumnController">\n' +
         '\n' +
-        '        <div class="gantt-table-header">\n' +
-        '            <div class="gantt-table-row" ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '                <div class="gantt-row-height gantt-row-label gantt-table-header-row" ng-class="{\'gantt-table-header-row-last\': $last}">\n' +
-        '                    <span ng-if="$last" class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/>\n' +
-        '                </div>\n' +
+        '        <div class="gantt-table-header" ng-style="{height: ganttHeaderHeight + \'px\'}">\n' +
+        '            <div class="gantt-row-label-header gantt-row-label gantt-table-row gantt-table-header-row">\n' +
+        '                <span class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/>\n' +
         '            </div>\n' +
         '        </div>\n' +
         '\n' +
@@ -2186,10 +2251,10 @@ angular.module('gantt.tree.templates', []).run(['$templateCache', function($temp
         '     ng-style="{\'height\': row.model.height}">\n' +
         '    <div class="gantt-valign-container">\n' +
         '        <div class="gantt-valign-content">\n' +
-        '            <a ng-disabled="!childrenRows || childrenRows.length === 0" data-nodrag\n' +
+        '            <a ng-disabled="isCollapseDisabled()" data-nodrag\n' +
         '               class="gantt-tree-handle-button btn btn-xs"\n' +
         '               ng-class="{\'gantt-tree-collapsed\': collapsed, \'gantt-tree-expanded\': !collapsed}"\n' +
-        '               ng-click="toggle()"><span\n' +
+        '               ng-click="!isCollapseDisabled() && toggle()"><span\n' +
         '                class="gantt-tree-handle glyphicon glyphicon-chevron-down"\n' +
         '                ng-class="{\n' +
         '                \'glyphicon-chevron-right\': collapsed, \'glyphicon-chevron-down\': !collapsed,\n' +
@@ -2206,12 +2271,8 @@ angular.module('gantt.tree.templates', []).run(['$templateCache', function($temp
         '</ol>\n' +
         '');
     $templateCache.put('plugins/tree/treeHeader.tmpl.html',
-        '<div class="gantt-tree-header">\n' +
-        '    <div ng-show="gantt.columnsManager.columns.length > 0 && gantt.columnsManager.headers.length > 0">\n' +
-        '        <div ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '            <div class="gantt-row-height gantt-row-label gantt-tree-header-row" ng-class="{\'gantt-tree-header-row-last\': $last}"><span ng-if="$last" class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/></div>\n' +
-        '        </div>\n' +
-        '    </div>\n' +
+        '<div class="gantt-tree-header" ng-style="{height: $parent.ganttHeaderHeight + \'px\'}">\n' +
+        '    <div class="gantt-row-label gantt-row-label-header gantt-tree-row gantt-tree-header-row"><span class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/></div>\n' +
         '</div>\n' +
         '');
 }]);

@@ -19,6 +19,7 @@ angular.module('angularGanttDemoApp', [
     'gantt.table',
     'gantt.tree',
     'gantt.groups',
+    'gantt.resizeSensor',
     'mgcrea.ngStrap'
 ]).config(['$compileProvider', function($compileProvider) {
     $compileProvider.debugInfoEnabled(true); // Remove debug info (angularJS >= 1.3)
@@ -43,6 +44,7 @@ angular.module('angularGanttDemoApp')
             scale: 'day',
             sortMode: undefined,
             sideMode: 'TreeTable',
+            daily: false,
             maxHeight: false,
             width: false,
             zoom: 1,
@@ -66,7 +68,7 @@ angular.module('angularGanttDemoApp')
             },
             autoExpand: 'none',
             taskOutOfRange: 'truncate',
-            fromDate: undefined,
+            fromDate: moment(null),
             toDate: undefined,
             allowSideResizing: true,
             labelsEnabled: true,
@@ -542,7 +544,7 @@ angular.module('angularGanttDemoApp')
                             to: new Date(2013, 9, 25, 15, 0, 0),
                             name: 'Sprint 1 Timespan'
                             //priority: undefined,
-                            //classes: [], //Set custom classes names to apply to the timespan.
+                            //classes: [],
                             //data: undefined
                         }
                     ];

@@ -87,7 +87,7 @@ angular.module('angularGanttDemoApp')
                             to: new Date(2013, 9, 25, 15, 0, 0),
                             name: 'Sprint 1 Timespan'
                             //priority: undefined,
-                            //classes: [], //Set custom classes names to apply to the timespan.
+                            //classes: [],
                             //data: undefined
                         }
                     ];

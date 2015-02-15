@@ -10,11 +10,6 @@
 .gantt-tree-body .gantt-row-label a.gantt-tree-handle-button {
     padding: 0;
     position: relative;
-    top: -0.50em;
-}
-
-.gantt-tree-body .gantt-row-label a.gantt-tree-handle-button.gantt-tree-expanded {
-    top: -0.40em;
 }
 
 .gantt-tree-body .gantt-row-label span.gantt-tree-handle {
@@ -28,15 +23,17 @@
 
 .gantt-tree-header {
     overflow: hidden;
+    position: relative;
 }
 
 .gantt-tree-body {
     overflow: hidden;
 }
 
-.gantt-tree-header-row-last {
-    border-top: 1px solid #dddddd;
-    border-bottom: 1px solid #dddddd;
+.gantt-tree-header-row {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
 }
 
 .gantt-tree-header-row span.gantt-label-text {
