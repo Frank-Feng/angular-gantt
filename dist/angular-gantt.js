@@ -32,6 +32,8 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 filterRowComparator: '=?',
                 viewScale: '=?',
                 columnWidth: '=?',
+                expandToFit: '=?',
+                shrinkToFit: '=?',
                 showSide: '=?',
                 allowSideResizing: '=?',
                 fromDate: '=?',
@@ -40,6 +42,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 currentDate: '=?',
                 autoExpand: '=?',
                 taskOutOfRange: '=?',
+                taskContent: '=?',
                 maxHeight: '=?',
                 headers: '=?',
                 headersFormats: '=?',
@@ -421,7 +424,9 @@ Github: https://github.com/angular-gantt/angular-gantt.git
         };
 
         TimeFrame.prototype.getDuration = function() {
-            return this.end.diff(this.start, 'milliseconds');
+            if (this.end !== undefined && this.start !== undefined) {
+                return this.end.diff(this.start, 'milliseconds');
+            }
         };
 
         TimeFrame.prototype.clone = function() {
@@ -815,7 +820,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
             this.date = undefined;
             this.position = undefined;
-            this.currentDateColumn = undefined;
+            this.currentDateColumnElement = undefined;
 
             this.gantt.$scope.simplifyMoment = function(d) {
                 return moment.isMoment(d) ? d.unix() : d;
@@ -830,20 +835,23 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
         GanttCurrentDateManager.prototype.setCurrentDate = function(currentDate) {
             this.date = currentDate;
-            if (this.currentDateColumn !== undefined) {
-                if (this.currentDateColumn.$element !== undefined) {
-                    this.currentDateColumn.$element.removeClass('gantt-foreground-col-current-date');
-                }
-                delete this.currentDateColumn;
-            }
+            var oldElement = this.currentDateColumnElement;
+            var newElement;
 
-            if (this.date !== undefined) {
+            if (this.date !== undefined && this.gantt.options.value('currentDate') === 'column') {
                 var column = this.gantt.columnsManager.getColumnByDate(this.date, true);
-                if (column !== undefined) {
-                    this.currentDateColumn = column;
-                    if (this.gantt.options.value('currentDate') === 'column' && this.currentDateColumn.$element !== undefined) {
-                        this.currentDateColumn.$element.addClass('gantt-foreground-col-current-date');
-                    }
+                if (column !== undefined && column.$element !== undefined) {
+                    newElement = column.$element;
+                }
+            }
+            this.currentDateColumnElement = newElement;
+
+            if (oldElement !== newElement) {
+                if (oldElement !== undefined) {
+                    oldElement.removeClass('gantt-foreground-col-current-date');
+                }
+                if (newElement !== undefined) {
+                    newElement.addClass('gantt-foreground-col-current-date');
                 }
             }
 
@@ -1415,6 +1423,8 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             this.gantt.api.registerMethod('columns', 'clear', this.clearColumns, this);
             this.gantt.api.registerMethod('columns', 'generate', this.generateColumns, this);
             this.gantt.api.registerMethod('columns', 'refresh', this.updateColumnsMeta, this);
+            this.gantt.api.registerMethod('columns', 'getColumnsWidth', this.getColumnsWidth, this);
+            this.gantt.api.registerMethod('columns', 'getColumnsWidthToFit', this.getColumnsWidthToFit, this);
 
             this.gantt.api.registerEvent('columns', 'generate');
             this.gantt.api.registerEvent('columns', 'refresh');
@@ -1536,8 +1546,9 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
             this.updateVisibleColumns(columnsWidthChanged);
 
-            var currentDateValue = this.gantt.options.value('currentDateValue');
             this.gantt.rowsManager.updateVisibleObjects();
+
+            var currentDateValue = this.gantt.options.value('currentDateValue');
             this.gantt.currentDateManager.setCurrentDate(currentDateValue);
 
             if (sideVisibilityChanged && showSide) {
@@ -1614,14 +1625,25 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
         ColumnsManager.prototype.updateColumnsWidths = function(columns) {
             var columnWidth = this.gantt.options.value('columnWidth');
-            var autoFitWidthEnabled = columnWidth === undefined;
-            if (autoFitWidthEnabled) {
-                var scrollWidth = this.gantt.getWidth() - this.gantt.side.getWidth();
-                var borderWidth = this.gantt.scroll.getBordersWidth();
-                var newWidth = scrollWidth - (borderWidth !== undefined ? this.gantt.scroll.getBordersWidth() : 0);
-                updateColumnsWidthImpl(newWidth, this.gantt.originalWidth, columns);
+            var expandToFit = this.gantt.options.value('expandToFit');
+            var shrinkToFit = this.gantt.options.value('shrinkToFit');
+
+            if (columnWidth === undefined || expandToFit || shrinkToFit) {
+                var newWidth = this.gantt.getBodyAvailableWidth();
+
+                var lastColumn = this.gantt.columnsManager.getLastColumn(false);
+                var currentWidth = lastColumn.left + lastColumn.width;
+
+                if (expandToFit && currentWidth < newWidth ||
+                    shrinkToFit && currentWidth > newWidth ||
+                    columnWidth === undefined
+                ) {
+                    updateColumnsWidthImpl(newWidth, this.gantt.originalWidth, columns);
+                    return true;
+                }
+
             }
-            return autoFitWidthEnabled;
+            return false;
         };
 
         ColumnsManager.prototype.getColumnsWidth = function() {
@@ -1634,6 +1656,10 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 }
             }
             return columnWidth;
+        };
+
+        ColumnsManager.prototype.getColumnsWidthToFit = function() {
+            return this.gantt.getBodyAvailableWidth() / this.columns.length;
         };
 
         ColumnsManager.prototype.expandExtendedColumnsForPosition = function(x) {
@@ -1710,6 +1736,9 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                     });
                 });
             }
+
+            var currentDateValue = this.gantt.options.value('currentDateValue');
+            this.gantt.currentDateManager.setCurrentDate(currentDateValue);
         };
 
         var defaultHeadersFormats = {'year': 'YYYY', 'quarter': '[Q]Q YYYY', month: 'MMMM YYYY', week: 'w', day: 'D', hour: 'H', minute:'HH:mm'};
@@ -1882,6 +1911,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                     'currentDateValue': moment,
                     'autoExpand': 'none',
                     'taskOutOfRange': 'truncate',
+                    'taskContent': '{{task.model.name}}',
                     'maxHeight': 0,
                     'timeFrames': [],
                     'dateFrames': [],
@@ -2099,6 +2129,13 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 } else {
                     return undefined;
                 }
+            };
+
+            Gantt.prototype.getBodyAvailableWidth = function() {
+                var scrollWidth = this.getWidth() - this.side.getWidth();
+                var borderWidth = this.scroll.getBordersWidth();
+                var availableWidth = scrollWidth - (borderWidth !== undefined ? this.scroll.getBordersWidth() : 0);
+                return availableWidth;
             };
 
             // Returns the position inside the Gantt calculated by the given date
@@ -2745,7 +2782,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
         RowsManager.prototype.removeCustomRowSorter = function(sorterFunction) {
             var i = this.customRowSorters.indexOf(sorterFunction);
             if (i > -1) {
-                this.customRowSorters.remove(i);
+                this.customRowSorters.splice(i, 1);
             }
         };
 
@@ -2839,7 +2876,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
         RowsManager.prototype.removeCustomRowFilter = function(filterFunction) {
             var i = this.customRowFilters.indexOf(filterFunction);
             if (i > -1) {
-                this.customRowFilters.remove(i);
+                this.customRowFilters.splice(i, 1);
             }
         };
 
@@ -3026,15 +3063,19 @@ Github: https://github.com/angular-gantt/angular-gantt.git
         Task.prototype.getBackgroundElement = function() {
             if (this.$element !== undefined) {
                 var backgroundElement = this.$element[0].querySelector('.gantt-task-background');
-                backgroundElement = angular.element(backgroundElement);
+                if (backgroundElement !== undefined) {
+                    backgroundElement = angular.element(backgroundElement);
+                }
                 return backgroundElement;
             }
         };
 
         Task.prototype.getContentElement = function() {
             if (this.$element !== undefined) {
-                var contentElement = this.$element[0].querySelector('.gantt-task-content-container');
-                contentElement = angular.element(contentElement);
+                var contentElement = this.$element[0].querySelector('.gantt-task-content');
+                if (contentElement !== undefined) {
+                    contentElement = angular.element(contentElement);
+                }
                 return contentElement;
             }
         };
@@ -3042,7 +3083,9 @@ Github: https://github.com/angular-gantt/angular-gantt.git
         Task.prototype.getForegroundElement = function() {
             if (this.$element !== undefined) {
                 var foregroundElement = this.$element[0].querySelector('.gantt-task-foreground');
-                foregroundElement = angular.element(foregroundElement);
+                if (foregroundElement !== undefined) {
+                    foregroundElement = angular.element(foregroundElement);
+                }
                 return foregroundElement;
             }
         };
@@ -3774,7 +3817,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
 (function() {
     'use strict';
-    angular.module('gantt').service('ganttUtils', ['$document', function($document) {
+    angular.module('gantt').service('ganttUtils', [function() {
         return {
             createBoundedWrapper: function(object, method) {
                 return function() {
@@ -3791,69 +3834,6 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                     }
                 }
                 return defaultValue;
-            },
-            elementFromPoint: function(x, y) {
-                return $document[0].elementFromPoint(x, y);
-            },
-            elementsFromPoint: function(x, y, depth) {
-                var elements = [], previousPointerEvents = [], cDepth = 0, current, i, l, d;
-
-                // get all elements via elementFromPoint, and remove them from hit-testing in order
-                while ((current = this.elementFromPoint(x, y)) && elements.indexOf(current) === -1 && current !== null &&
-                    (depth === undefined || cDepth < depth)) {
-
-                    // push the element and its current style
-                    elements.push(current);
-                    previousPointerEvents.push({
-                        value: current.style.getPropertyValue('pointer-events'),
-                        priority: current.style.getPropertyPriority('pointer-events')
-                    });
-
-                    // add "pointer-events: none", to get to the underlying element
-                    current.style.setProperty('pointer-events', 'none', 'important');
-
-                    cDepth++;
-                }
-
-                // restore the previous pointer-events values
-                for (i = 0, l = previousPointerEvents.length; i < l; i++) {
-                    d = previousPointerEvents[i];
-                    elements[i].style.setProperty('pointer-events', d.value ? d.value : '', d.priority);
-                }
-
-                return elements;
-            },
-            findElementFromPoint: function(x, y, checkFunction) {
-                var elements = [], previousPointerEvents = [], cDepth = 0, current, found, i, l, d;
-
-                // get all elements via elementFromPoint, and remove them from hit-testing in order
-                while ((current = this.elementFromPoint(x, y)) && elements.indexOf(current) === -1 && current !== null) {
-
-                    // push the element and its current style
-                    elements.push(current);
-                    previousPointerEvents.push({
-                        value: current.style.getPropertyValue('pointer-events'),
-                        priority: current.style.getPropertyPriority('pointer-events')
-                    });
-
-                    // add "pointer-events: none", to get to the underlying element
-                    current.style.setProperty('pointer-events', 'none', 'important');
-
-                    cDepth++;
-
-                    if (checkFunction(current)) {
-                        found = current;
-                        break;
-                    }
-                }
-
-                // restore the previous pointer-events values
-                for (i = 0, l = previousPointerEvents.length; i < l; i++) {
-                    d = previousPointerEvents[i];
-                    elements[i].style.setProperty('pointer-events', d.value ? d.value : '', d.priority);
-                }
-
-                return found;
             },
             random4: function() {
                 return Math.floor((1 + Math.random()) * 0x10000)
@@ -4567,6 +4547,13 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             $scope.task.$element = $element;
             $scope.task.$scope = $scope;
 
+            $scope.getTaskContent = function() {
+                if ($scope.task.model.content !== undefined) {
+                    return $scope.task.model.content;
+                }
+                return $scope.task.rowsManager.gantt.options.value('taskContent');
+            };
+
             $scope.simplifyMoment = function(d) {
                 return moment.isMoment(d) ? d.unix() : d;
             };
@@ -4730,6 +4717,78 @@ Github: https://github.com/angular-gantt/angular-gantt.git
     }]);
 }());
 
+(function() {
+    'use strict';
+    angular.module('gantt').service('ganttDom', ['$document', function($document) {
+        return {
+            elementFromPoint: function(x, y) {
+                return $document[0].elementFromPoint(x, y);
+            },
+            elementsFromPoint: function(x, y, depth) {
+                var elements = [], previousPointerEvents = [], cDepth = 0, current, i, l, d;
+
+                // get all elements via elementFromPoint, and remove them from hit-testing in order
+                while ((current = this.elementFromPoint(x, y)) && elements.indexOf(current) === -1 && current !== null &&
+                (depth === undefined || cDepth < depth)) {
+
+                    // push the element and its current style
+                    elements.push(current);
+                    previousPointerEvents.push({
+                        value: current.style.getPropertyValue('visibility'),
+                        priority: current.style.getPropertyPriority('visibility')
+                    });
+
+                    // add "pointer-events: none", to get to the underlying element
+                    current.style.setProperty('visibility', 'hidden', 'important');
+
+                    cDepth++;
+                }
+
+                // restore the previous pointer-events values
+                for (i = 0, l = previousPointerEvents.length; i < l; i++) {
+                    d = previousPointerEvents[i];
+                    elements[i].style.setProperty('visibility', d.value ? d.value : '', d.priority);
+                }
+
+                return elements;
+            },
+            findElementFromPoint: function(x, y, checkFunction) {
+                var elements = [], previousPointerEvents = [], cDepth = 0, current, found, i, l, d;
+
+                // get all elements via elementFromPoint, and remove them from hit-testing in order
+                while ((current = this.elementFromPoint(x, y)) && elements.indexOf(current) === -1 && current !== null) {
+
+                    // push the element and its current style
+                    elements.push(current);
+                    previousPointerEvents.push({
+                        value: current.style.getPropertyValue('visibility'),
+                        priority: current.style.getPropertyPriority('visibility')
+                    });
+
+                    // add "visibility: hidden", to get to the underlying element.
+                    // Would be better with pointer-events: none, but IE<11 doesn't support this.
+                    current.style.setProperty('visibility', 'hidden', 'important');
+
+                    cDepth++;
+
+                    if (checkFunction(current)) {
+                        found = current;
+                        break;
+                    }
+                }
+
+                // restore the previous pointer-events values
+                for (i = 0, l = previousPointerEvents.length; i < l; i++) {
+                    d = previousPointerEvents[i];
+                    elements[i].style.setProperty('visibility', d.value ? d.value : '', d.priority);
+                }
+
+                return found;
+            }
+        };
+    }]);
+}());
+
 (function(){
     'use strict';
     angular.module('gantt').service('ganttEnableNgAnimate', ['$injector', function($injector) {
@@ -4751,6 +4810,23 @@ Github: https://github.com/angular-gantt/angular-gantt.git
     }]);
 }());
 
+
+(function() {
+    'use strict';
+    angular.module('gantt').directive('ganttBindCompileHtml', ['$compile', function($compile) {
+        return {
+            restrict: 'A',
+            link: function(scope, element, attrs) {
+                scope.$watch(function() {
+                    return scope.$eval(attrs.ganttBindCompileHtml);
+                }, function(value) {
+                    element.html(value);
+                    $compile(element.contents())(scope);
+                });
+            }
+        };
+    }]);
+}());
 
 (function(){
     'use strict';
@@ -4938,7 +5014,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '    <gantt-scrollable-header>\n' +
         '        <gantt-header>\n' +
         '            <gantt-header-columns>\n' +
-        '                <div ng-repeat="header in gantt.columnsManager.visibleHeaders">\n' +
+        '                <div ng-repeat="header in gantt.columnsManager.visibleHeaders track by $index">\n' +
         '                    <div class="gantt-header-row" ng-class="{\'gantt-header-row-last\': $last, \'gantt-header-row-first\': $first}">\n' +
         '                        <gantt-column-header ng-repeat="column in header"></gantt-column-header>\n' +
         '                    </div>\n' +
@@ -5075,7 +5151,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '\n' +
         '    <!-- Task content template -->\n' +
         '    <script type="text/ng-template" id="template/ganttTaskContent.tmpl.html">\n' +
-        '        <div class="gantt-task-content"><span>{{task.model.name}}</span></div>\n' +
+        '        <div class="gantt-task-content" unselectable="on"><span unselectable="on" gantt-bind-compile-html="getTaskContent()"/></div>\n' +
         '    </script>\n' +
         '\n' +
         '\n' +

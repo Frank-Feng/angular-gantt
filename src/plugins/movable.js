@@ -10,7 +10,8 @@
                     enabled: '=?',
                     allowMoving: '=?',
                     allowResizing: '=?',
-                    allowRowSwitching: '=?'
+                    allowRowSwitching: '=?',
+                    allowSwitchTo: '=?'
                 },
                 link: function(scope, element, attrs, ganttCtrl) {
                     var api = ganttCtrl.gantt.api;
@@ -169,12 +170,16 @@
                                         }
 
                                         var sourceRow = taskScope.task.row;
-
-                                        if (targetRow !== undefined && sourceRow !== targetRow) {
-                                            targetRow.moveTaskToRow(taskScope.task, true);
-                                            sourceRow.$scope.$digest();
-                                            targetRow.$scope.$digest();
-                                            taskHasBeenChanged = true;
+                                        
+                                        var allowSwitchToValue = utils.firstProperty([taskMovable, rowMovable], 'allowSwitchTo', scope.allowSwitchTo);
+                                        var allowSwitchTo = angular.isFunction(allowSwitchToValue) ? allowSwitchToValue(taskScope.task, targetRow): allowSwitchToValue;
+                                        if (allowSwitchTo) {
+                                            if (targetRow !== undefined && sourceRow !== targetRow) {
+                                                targetRow.moveTaskToRow(taskScope.task, true);
+                                                sourceRow.$scope.$digest();
+                                                targetRow.$scope.$digest();
+                                                taskHasBeenChanged = true;
+                                            }
                                         }
                                     }
 

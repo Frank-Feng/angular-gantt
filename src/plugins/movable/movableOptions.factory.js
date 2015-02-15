@@ -8,6 +8,7 @@
                 options.allowMoving = options.allowMoving !== undefined ? !!options.allowMoving : true;
                 options.allowResizing = options.allowResizing !== undefined ? !!options.allowResizing : true;
                 options.allowRowSwitching = options.allowRowSwitching !== undefined ? !!options.allowRowSwitching : true;
+                options.allowSwitchTo = options.allowSwitchTo !== undefined ? options.allowSwitchTo : true;
 
                 return options;
             }

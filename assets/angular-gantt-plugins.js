@@ -299,7 +299,8 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                     enabled: '=?',
                     allowMoving: '=?',
                     allowResizing: '=?',
-                    allowRowSwitching: '=?'
+                    allowRowSwitching: '=?',
+                    allowSwitchTo: '=?'
                 },
                 link: function(scope, element, attrs, ganttCtrl) {
                     var api = ganttCtrl.gantt.api;
@@ -458,12 +459,16 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                                         }
 
                                         var sourceRow = taskScope.task.row;
-
-                                        if (targetRow !== undefined && sourceRow !== targetRow) {
-                                            targetRow.moveTaskToRow(taskScope.task, true);
-                                            sourceRow.$scope.$digest();
-                                            targetRow.$scope.$digest();
-                                            taskHasBeenChanged = true;
+                                        
+                                        var allowSwitchToValue = utils.firstProperty([taskMovable, rowMovable], 'allowSwitchTo', scope.allowSwitchTo);
+                                        var allowSwitchTo = angular.isFunction(allowSwitchToValue) ? allowSwitchToValue(taskScope.task, targetRow): allowSwitchToValue;
+                                        if (allowSwitchTo) {
+                                            if (targetRow !== undefined && sourceRow !== targetRow) {
+                                                targetRow.moveTaskToRow(taskScope.task, true);
+                                                sourceRow.$scope.$digest();
+                                                targetRow.$scope.$digest();
+                                                taskHasBeenChanged = true;
+                                            }
                                         }
                                     }
 
@@ -1420,6 +1425,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 options.allowMoving = options.allowMoving !== undefined ? !!options.allowMoving : true;
                 options.allowResizing = options.allowResizing !== undefined ? !!options.allowResizing : true;
                 options.allowRowSwitching = options.allowRowSwitching !== undefined ? !!options.allowRowSwitching : true;
+                options.allowSwitchTo = options.allowSwitchTo !== undefined ? options.allowSwitchTo : true;
 
                 return options;
             }
@@ -2013,7 +2019,6 @@ angular.module('gantt.bounds.templates', []).run(['$templateCache', function($te
         '<div ng-cloak class="gantt-task-bounds" ng-style="getCss()" ng-class="getClass()"></div>\n' +
         '');
 }]);
-
 
 angular.module('gantt.drawtask.templates', []).run(['$templateCache', function($templateCache) {
 
