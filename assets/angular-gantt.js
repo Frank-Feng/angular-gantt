@@ -5229,9 +5229,8 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '             ng-class="row.model.classes"\n' +
         '             ng-class-odd="\'gantt-row-odd\'"\n' +
         '             ng-class-even="\'gantt-row-even\'"\n' +
-        '             ng-style="{\'height\': row.model.height}"\n' +
-        '             ng-class="{\'gantt-row-group\': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">\n' +
-        '            <div ng-transclude class="gantt-row-content"></div>\n' +
+        '             ng-style="{\'height\': row.model.height}">\n' +
+        '            <div ng-transclude class="gantt-row-content" ng-class="{\'gantt-row-group\': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}"></div>\n' +
         '        </div>\n' +
         '    </script>\n' +
         '\n' +
