@@ -99,7 +99,7 @@
     </script>
 
     <script type="text/ng-template" id="template/ganttColumn.tmpl.html">
-        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{'gantt-column-last': $last, 'gantt-column-first': $first}"></div>
+        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{'gantt-column-last': $last, 'gantt-column-first': $first, 'gantt-column-day-end': column.timeFrames[0].start.get('date') !== column.timeFrames[0].end.get('date')}"></div>
     </script>
 
     <script type="text/ng-template" id="template/ganttTimeFrame.tmpl.html">
@@ -171,7 +171,8 @@
              ng-class="row.model.classes"
              ng-class-odd="'gantt-row-odd'"
              ng-class-even="'gantt-row-even'"
-             ng-style="{'height': row.model.height}">
+             ng-style="{'height': row.model.height}"
+             ng-class="{'gantt-row-group': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">
             <div ng-transclude class="gantt-row-content"></div>
         </div>
     </script>
@@ -191,7 +192,7 @@
                          ng-repeat="row in gantt.rowsManager.visibleRows track by row.model.id"
                          ng-style="{'height': row.model.height}">
                         <div gantt-row-label class="gantt-row-label gantt-row-background"
-                             ng-style="{'background-color': row.model.color}">
+                             ng-style="{'background-color': row.model.color}" ng-class="{'gantt-row-group': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">
                         </div>
                     </div>
                 </div>

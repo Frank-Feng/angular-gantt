@@ -383,3 +383,11 @@
         -ms-user-select: none;
             user-select: none;
 }
+
+.gantt-column-day-end {
+    border-right: 2px solid #AAAAAA;
+}
+
+.gantt-row-group {
+    border-bottom: 2px solid #AAAAAA;
+}

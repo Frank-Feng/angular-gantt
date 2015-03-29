@@ -811,6 +811,65 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
 
 (function(){
+    /* global ResizeSensor: false */
+    /* global ElementQueries: false */
+    'use strict';
+    angular.module('gantt.resizeSensor', ['gantt']).directive('ganttResizeSensor', [function() {
+        return {
+            restrict: 'E',
+            require: '^gantt',
+            scope: {
+                enabled: '=?'
+            },
+            link: function(scope, element, attrs, ganttCtrl) {
+                var api = ganttCtrl.gantt.api;
+
+                // Load options from global options attribute.
+                if (scope.options && typeof(scope.options.progress) === 'object') {
+                    for (var option in scope.options.progress) {
+                        scope[option] = scope.options[option];
+                    }
+                }
+
+                if (scope.enabled === undefined) {
+                    scope.enabled = true;
+                }
+
+                function buildSensor() {
+                    var ganttElement = element.parent().parent().parent()[0].querySelectorAll('div.gantt')[0];
+                    return new ResizeSensor(ganttElement, function() {
+                        ganttCtrl.gantt.$scope.ganttElementWidth = ganttElement.clientWidth;
+                        ganttCtrl.gantt.$scope.$apply();
+                    });
+                }
+
+                api.core.on.rendered(scope, function() {
+                    if (sensor !== undefined) {
+                        sensor.detach();
+                    }
+                    if (scope.enabled) {
+                        ElementQueries.update();
+                        sensor = buildSensor();
+                    }
+                });
+
+                var sensor;
+                scope.$watch('enabled', function(newValue) {
+                    if (newValue && sensor === undefined) {
+                        ElementQueries.update();
+                        sensor = buildSensor();
+                    } else if (!newValue && sensor !== undefined) {
+                        sensor.detach();
+                        sensor = undefined;
+                    }
+                });
+            }
+        };
+    }]);
+}());
+
+
+(function(){
     'use strict';
 
     var moduleName = 'gantt.sortable';
@@ -1013,6 +1072,57 @@ Github: https://github.com/angular-gantt/angular-gantt.git
     }]);
 }());
 
+
+(function(){
+    'use strict';
+    angular.module('gantt.toolbars', ['gantt']).directive('ganttToolbars', ['$compile', '$document', function($compile, $document) {
+        return {
+            restrict: 'E',
+            require: '^gantt',
+            scope: {
+                enabled: '=?'
+            },
+            link: function(scope, element, attrs, ganttCtrl) {
+                var api = ganttCtrl.gantt.api;
+
+                // Load options from global options attribute.
+                if (scope.options && typeof(scope.options.toolbars) === 'object') {
+                    for (var option in scope.options.toolbars) {
+                        scope[option] = scope.options[option];
+                    }
+                }
+
+                if (scope.enabled === undefined) {
+                    scope.enabled = true;
+                }
+
+                scope.api = api;
+
+                api.directives.on.new(scope, function(directiveName, taskScope, taskElement) {
+                    if (directiveName === 'ganttTask') {
+                        var toolbarScope = taskScope.$new();
+
+                        toolbarScope.pluginScope = scope;
+                        var ifElement = $document[0].createElement('div');
+                        angular.element(ifElement).attr('data-ng-if', 'pluginScope.enabled');
+
+                        var toolbarElement = $document[0].createElement('gantt-toolbar');
+                        if (attrs.templateUrl !== undefined) {
+                            angular.element(toolbarElement).attr('data-template-url', attrs.templateUrl);
+                        }
+                        if (attrs.template !== undefined) {
+                            angular.element(toolbarElement).attr('data-template', attrs.template);
+                        }
+
+                        //append toolbar element to body
+                        angular.element(ifElement).append(toolbarElement);
+                        taskElement.append($compile(ifElement)(toolbarScope));
+                    }
+                });
+            }
+        };
+    }]);
+}());
 
 (function(){
     'use strict';
@@ -1591,6 +1701,191 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
 (function() {
     'use strict';
+    angular.module('gantt.toolbars').directive('ganttToolbar', ['$timeout', '$compile', '$document', '$templateCache', 'ganttDebounce', 'ganttSmartEvent', function($timeout, $compile, $document, $templateCache, debounce, smartEvent) {
+        // This toolbar displays more operation on a task
+
+        return {
+            restrict: 'E',
+            templateUrl: function(tElement, tAttrs) {
+                var templateUrl;
+                if (tAttrs.templateUrl !== undefined) {
+                    templateUrl = tAttrs.templateUrl;
+                }
+                if (tAttrs.template !== undefined) {
+                    $templateCache.put(templateUrl, tAttrs.template);
+                }
+                return templateUrl;
+            },
+            scope: true,
+            replace: true,
+            controller: ['$scope', '$element', '$attrs', 'ganttUtils', function($scope, $element, $attrs, utils) {
+                var bodyElement = angular.element($document[0].body);
+                var parentElement = $scope.task.$element;
+                var showToolbarPromise;
+                var visible = false;
+                var mouseEnterX;
+                
+                var inElement = function (event) {
+                    var xIn = false, yIn = false;
+                    if (event.clientX >= $element[0].offsetLeft && event.clientX <= $element[0].offsetLeft + $element[0].offsetWidth) {
+                        xIn = true;
+                    }
+                    if (event.clientY >= $element[0].offsetTop && event.clientY <= $element[0].offsetTop + $element[0].offsetHeight) {
+                        yIn = true;
+                    }
+                    return xIn && yIn;
+                };
+
+                var mouseMoveHandler = smartEvent($scope, bodyElement, 'mousemove', debounce(function(e) {
+                    mouseEnterX = e.clientX;
+                    if (!visible) {
+                        displayToolbar(true, false);
+                    } else if (!inElement(e)) {
+                        updateToolbar(mouseEnterX);
+                    }
+                }, 5, false));
+
+                $scope.task.getForegroundElement().bind('mousemove', function(evt) {
+                    mouseEnterX = evt.clientX;
+                });
+
+                $scope.task.getForegroundElement().bind('mouseenter', function(evt) {
+                    mouseEnterX = evt.clientX;
+                    displayToolbar(true, true);
+                });
+
+                $scope.task.getForegroundElement().bind('mouseleave', function(evt) {
+                    if (!inElement(evt)) {
+                        displayToolbar(false);
+                    }
+                });
+
+                $element.bind('mouseleave', function () {
+                    displayToolbar(false);
+                });
+
+                if ($scope.pluginScope.api.tasks.on.moveBegin) {
+                    $scope.pluginScope.api.tasks.on.moveBegin($scope, function(task) {
+                        if (task === $scope.task) {
+                            displayToolbar(true);
+                        }   
+                    });
+                    
+                    $scope.pluginScope.api.tasks.on.moveEnd($scope, function(task) {
+                        if (task === $scope.task) {
+                            displayToolbar(false);
+                        }
+                    });
+
+                    $scope.pluginScope.api.tasks.on.resizeBegin($scope, function(task) {
+                        if (task === $scope.task) {
+                            displayToolbar(true);
+                        }
+                    });
+
+                    $scope.pluginScope.api.tasks.on.resizeEnd($scope, function(task) {
+                        if (task === $scope.task) {
+                            displayToolbar(false);
+                        }
+                    });
+                }
+
+                var displayToolbar = function(newValue, showDelayed) {
+                    if (showToolbarPromise) {
+                        $timeout.cancel(showToolbarPromise);
+                    }
+
+                    var rowToolbar = $scope.task.row.model.toolbar;
+                    if (typeof(rowToolbar) === 'boolean') {
+                        rowToolbar = {enabled: rowToolbar};
+                    }
+                    var enabled = utils.firstProperty([rowToolbar], 'enabled', $scope.pluginScope.enabled);
+                    if (enabled && !visible && newValue) {
+                        if (showDelayed) {
+                            showToolbarPromise = $timeout(function() {
+                                showToolbar(mouseEnterX);
+                            }, 500, false);
+                        } else {
+                            showToolbar(mouseEnterX);
+                        }
+                    } else if (!newValue) {
+                        if (!$scope.task.active) {
+                            hideToolbar();
+                        }
+                    }
+                };
+
+                var showToolbar = function(x) {
+                    visible = true;
+                    mouseMoveHandler.bind();
+
+                    var taskToolbar = $scope.task.model.toolbar;
+                    var rowToolbar = $scope.task.row.model.toolbar;
+
+                    if (typeof(taskToolbar) === 'boolean') {
+                        taskToolbar = {enabled: taskToolbar};
+                    }
+
+                    if (typeof(rowToolbar) === 'boolean') {
+                        rowToolbar = {enabled: rowToolbar};
+                    }
+
+                    $scope.displayed = utils.firstProperty([taskToolbar, rowToolbar], 'enabled', $scope.pluginScope.enabled);
+
+                    $scope.$evalAsync(function() {
+                        var restoreNgHide;
+                        if ($element.hasClass('ng-hide')) {
+                            $element.removeClass('ng-hide');
+                            restoreNgHide = true;
+                        }
+                        $scope.elementHeight = $element[0].offsetHeight;
+                        if (restoreNgHide) {
+                            $element.addClass('ng-hide');
+                        }
+                        $scope.taskRect = parentElement[0].getBoundingClientRect();
+                        updateToolbar(x);
+                    });
+                };
+
+                var getViewPortWidth = function() {
+                    var d = $document[0];
+                    return d.documentElement.clientWidth || d.documentElement.getElementById('body')[0].clientWidth;
+                };
+
+                var updateToolbar = function(x) {
+                    // Check if toolbar is overlapping with view port
+                    if (x + $element[0].offsetWidth > getViewPortWidth()) {
+                        $element.css('left', (x + 20 - $element[0].offsetWidth) + 'px');
+                        $scope.isRightAligned = true;
+                    } else {
+                        $element.css('left', (x - 20) + 'px');
+                        $scope.isRightAligned = false;
+                    }
+                };
+
+                var hideToolbar = function() {
+                    visible = false;
+                    mouseMoveHandler.unbind();
+                    $scope.$evalAsync(function() {
+                        $scope.displayed = false;
+                    });
+                };
+
+                if ($scope.task.isMoving) {
+                    // Display toolbar because task has been moved to a new row
+                    displayToolbar(true, false);
+                }
+
+                $scope.gantt.api.directives.raise.new('ganttToolbar', $scope, $element);
+                $scope.$on('$destroy', function() {
+                    $scope.gantt.api.directives.raise.destroy('ganttToolbar', $scope, $element);
+                });
+            }]
+        };
+    }]);
+}());
+(function() {
+    'use strict';
     angular.module('gantt.tooltips').directive('ganttTooltip', ['$timeout', '$compile', '$document', '$templateCache', 'ganttDebounce', 'ganttSmartEvent', function($timeout, $compile, $document, $templateCache, debounce, smartEvent) {
         // This tooltip displays more information about a task
 
@@ -1956,6 +2251,10 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             $scope.$parent.childrenRows = newValue;
         });
 
+        $scope.isCollapseDisabled = function(){
+            return !$scope.$parent.childrenRows || $scope.$parent.childrenRows.length === 0;
+        };
+
         $scope.getValue = function() {
             return $scope.row.model.name;
         };
@@ -2073,7 +2372,7 @@ angular.module('gantt.labels.templates', []).run(['$templateCache', function($te
         '<div class="gantt-labels-header">\n' +
         '    <div ng-show="gantt.columnsManager.columns.length > 0 && gantt.columnsManager.headers.length > 0">\n' +
         '        <div ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '            <div class="gantt-row-height" ng-class="{\'gantt-labels-header-row\': $last, \'gantt-labels-header-row-last\': $last}"><span class="gantt-label-text">{{$last ? pluginScope.header : ""}}</span></div>\n' +
+        '            <div class="gantt-row-height" ng-class="{\'gantt-labels-header-row\': $last, \'gantt-labels-header-row-last\': $last}"><span>{{$last ? pluginScope.header : ""}}</span></div>\n' +
         '        </div>\n' +
         '    </div>\n' +
         '</div>\n' +
@@ -2098,6 +2397,10 @@ angular.module('gantt.progress.templates', []).run(['$templateCache', function($
         '');
 }]);
 
+angular.module('gantt.resizeSensor.templates', []).run(['$templateCache', function($templateCache) {
+
+}]);
+
 angular.module('gantt.sortable.templates', []).run(['$templateCache', function($templateCache) {
 
 }]);
@@ -2108,11 +2411,9 @@ angular.module('gantt.table.templates', []).run(['$templateCache', function($tem
         '\n' +
         '    <div class="gantt-table-column {{getClass()}}" ng-repeat="column in pluginScope.columns" ng-controller="TableColumnController">\n' +
         '\n' +
-        '        <div class="gantt-table-header">\n' +
-        '            <div class="gantt-table-row" ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '                <div class="gantt-row-height gantt-row-label gantt-table-header-row" ng-class="{\'gantt-table-header-row-last\': $last}">\n' +
-        '                    <span ng-if="$last" class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/>\n' +
-        '                </div>\n' +
+        '        <div class="gantt-table-header" ng-style="{height: ganttHeaderHeight + \'px\'}">\n' +
+        '            <div class="gantt-row-label-header gantt-row-label gantt-table-row gantt-table-header-row">\n' +
+        '                <span class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/>\n' +
         '            </div>\n' +
         '        </div>\n' +
         '\n' +
@@ -2133,6 +2434,10 @@ angular.module('gantt.table.templates', []).run(['$templateCache', function($tem
         '    </div>\n' +
         '</div>\n' +
         '');
+}]);
+
+angular.module('gantt.toolbars.templates', []).run(['$templateCache', function($templateCache) {
+
 }]);
 
 angular.module('gantt.tooltips.templates', []).run(['$templateCache', function($templateCache) {
@@ -2186,10 +2491,10 @@ angular.module('gantt.tree.templates', []).run(['$templateCache', function($temp
         '     ng-style="{\'height\': row.model.height}">\n' +
         '    <div class="gantt-valign-container">\n' +
         '        <div class="gantt-valign-content">\n' +
-        '            <a ng-disabled="!childrenRows || childrenRows.length === 0" data-nodrag\n' +
+        '            <a ng-disabled="isCollapseDisabled()" data-nodrag\n' +
         '               class="gantt-tree-handle-button btn btn-xs"\n' +
         '               ng-class="{\'gantt-tree-collapsed\': collapsed, \'gantt-tree-expanded\': !collapsed}"\n' +
-        '               ng-click="toggle()"><span\n' +
+        '               ng-click="!isCollapseDisabled() && toggle()"><span\n' +
         '                class="gantt-tree-handle glyphicon glyphicon-chevron-down"\n' +
         '                ng-class="{\n' +
         '                \'glyphicon-chevron-right\': collapsed, \'glyphicon-chevron-down\': !collapsed,\n' +
@@ -2206,12 +2511,8 @@ angular.module('gantt.tree.templates', []).run(['$templateCache', function($temp
         '</ol>\n' +
         '');
     $templateCache.put('plugins/tree/treeHeader.tmpl.html',
-        '<div class="gantt-tree-header">\n' +
-        '    <div ng-show="gantt.columnsManager.columns.length > 0 && gantt.columnsManager.headers.length > 0">\n' +
-        '        <div ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '            <div class="gantt-row-height gantt-row-label gantt-tree-header-row" ng-class="{\'gantt-tree-header-row-last\': $last}"><span ng-if="$last" class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/></div>\n' +
-        '        </div>\n' +
-        '    </div>\n' +
+        '<div class="gantt-tree-header" ng-style="{height: $parent.ganttHeaderHeight + \'px\'}">\n' +
+        '    <div class="gantt-row-label gantt-row-label-header gantt-tree-row gantt-tree-header-row"><span class="gantt-label-text" gantt-bind-compile-html="getHeaderContent()"/></div>\n' +
         '</div>\n' +
         '');
 }]);

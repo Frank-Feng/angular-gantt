@@ -5157,7 +5157,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '    </script>\n' +
         '\n' +
         '    <script type="text/ng-template" id="template/ganttColumn.tmpl.html">\n' +
-        '        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{\'gantt-column-last\': $last, \'gantt-column-first\': $first}"></div>\n' +
+        '        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{\'gantt-column-last\': $last, \'gantt-column-first\': $first, \'gantt-column-day-end\': column.timeFrames[0].start.get(\'date\') !== column.timeFrames[0].end.get(\'date\')}"></div>\n' +
         '    </script>\n' +
         '\n' +
         '    <script type="text/ng-template" id="template/ganttTimeFrame.tmpl.html">\n' +
@@ -5229,7 +5229,8 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '             ng-class="row.model.classes"\n' +
         '             ng-class-odd="\'gantt-row-odd\'"\n' +
         '             ng-class-even="\'gantt-row-even\'"\n' +
-        '             ng-style="{\'height\': row.model.height}">\n' +
+        '             ng-style="{\'height\': row.model.height}"\n' +
+        '             ng-class="{\'gantt-row-group\': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">\n' +
         '            <div ng-transclude class="gantt-row-content"></div>\n' +
         '        </div>\n' +
         '    </script>\n' +
@@ -5249,7 +5250,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '                         ng-repeat="row in gantt.rowsManager.visibleRows track by row.model.id"\n' +
         '                         ng-style="{\'height\': row.model.height}">\n' +
         '                        <div gantt-row-label class="gantt-row-label gantt-row-background"\n' +
-        '                             ng-style="{\'background-color\': row.model.color}">\n' +
+        '                             ng-style="{\'background-color\': row.model.color}" ng-class="{\'gantt-row-group\': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">\n' +
         '                        </div>\n' +
         '                    </div>\n' +
         '                </div>\n' +

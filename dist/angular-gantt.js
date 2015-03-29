@@ -40,6 +40,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 toDate: '=?',
                 currentDateValue: '=?',
                 currentDate: '=?',
+                daily: '=?',
                 autoExpand: '=?',
                 taskOutOfRange: '=?',
                 taskContent: '=?',
@@ -1400,7 +1401,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 }
             });
 
-            this.gantt.$scope.$watchGroup(['ganttElementWidth', 'showSide', 'sideWidth', 'maxHeight'], function(newValues, oldValues) {
+            this.gantt.$scope.$watchGroup(['ganttElementWidth', 'showSide', 'sideWidth', 'maxHeight', 'daily'], function(newValues, oldValues) {
                 if (newValues !== oldValues && self.gantt.rendered) {
                     self.updateColumnsMeta();
                 }
@@ -1476,14 +1477,14 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 to = this.gantt.options.value('toDate');
             }
 
-            if (!from) {
+            if (!from || (moment.isMoment(from) && !from.isValid())) {
                 from = this.gantt.rowsManager.getDefaultFrom();
                 if (!from) {
                     return false;
                 }
             }
 
-            if (!to) {
+            if (!to || (moment.isMoment(to) && !to.isValid())) {
                 to = this.gantt.rowsManager.getDefaultTo();
                 if (!to) {
                     return false;
@@ -1924,6 +1925,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 this.api.registerEvent('core', 'ready');
                 this.api.registerEvent('core', 'rendered');
 
+                this.api.registerEvent('directives', 'controller');
                 this.api.registerEvent('directives', 'preLink');
                 this.api.registerEvent('directives', 'postLink');
                 this.api.registerEvent('directives', 'new');
@@ -2135,6 +2137,8 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                 var scrollWidth = this.getWidth() - this.side.getWidth();
                 var borderWidth = this.scroll.getBordersWidth();
                 var availableWidth = scrollWidth - (borderWidth !== undefined ? this.scroll.getBordersWidth() : 0);
+                // Remove 1 pixel because of rounding issue in some cases.
+                availableWidth = availableWidth - 1;
                 return availableWidth;
             };
 
@@ -2974,7 +2978,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
 (function() {
     'use strict';
-    angular.module('gantt').factory('GanttTask', [function() {
+    angular.module('gantt').factory('GanttTask', ['moment', function(moment) {
         var Task = function(row, model) {
             this.rowsManager = row.rowsManager;
             this.row = row;
@@ -2987,41 +2991,63 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             return !this.model.to || this.model.from - this.model.to === 0;
         };
 
+        Task.prototype.isOutOfRange = function() {
+            var firstColumn = this.rowsManager.gantt.columnsManager.getFirstColumn();
+            var lastColumn = this.rowsManager.gantt.columnsManager.getLastColumn();
+
+            return (firstColumn === undefined || this.model.to < firstColumn.date ||
+                    lastColumn === undefined || this.model.from > lastColumn.endDate);
+        };
+
         // Updates the pos and size of the task according to the from - to date
         Task.prototype.updatePosAndSize = function() {
-            var oldModelLeft = this.modelLeft;
-            var oldModelWidth = this.modelWidth;
+            var oldViewLeft = this.left;
+            var oldViewWidth = this.width;
             var oldTruncatedRight = this.truncatedRight;
             var oldTruncatedLeft = this.truncatedLeft;
 
-            this.modelLeft = this.rowsManager.gantt.getPositionByDate(this.model.from);
-            this.modelWidth = this.rowsManager.gantt.getPositionByDate(this.model.to) - this.modelLeft;
+            if (!this.isMoving && this.isOutOfRange()) {
+                this.modelLeft = undefined;
+                this.modelWidth = undefined;
+            } else {
+                this.modelLeft = this.rowsManager.gantt.getPositionByDate(this.model.from);
+                this.modelWidth = this.rowsManager.gantt.getPositionByDate(this.model.to) - this.modelLeft;
+            }
 
             var lastColumn = this.rowsManager.gantt.columnsManager.getLastColumn();
             var maxModelLeft = lastColumn ? lastColumn.left + lastColumn.width : 0;
 
-            if (this.modelLeft + this.modelWidth < 0 || this.modelLeft > maxModelLeft) {
+            var modelLeft = this.modelLeft;
+            var modelWidth = this.modelWidth;
+
+            if (this.rowsManager.gantt.options.value('daily')) {
+                modelLeft = this.rowsManager.gantt.getPositionByDate(moment(this.model.from).startOf('day'));
+                modelWidth = this.rowsManager.gantt.getPositionByDate(moment(this.model.to).endOf('day')) - modelLeft;
+            }
+
+            if (modelLeft === undefined || modelWidth === undefined ||
+                modelLeft + modelWidth < 0 || modelLeft > maxModelLeft) {
                 this.left = undefined;
                 this.width = undefined;
             } else {
-                this.left = Math.min(Math.max(this.modelLeft, 0), this.rowsManager.gantt.width);
-                if (this.modelLeft < 0) {
+                this.left = Math.min(Math.max(modelLeft, 0), this.rowsManager.gantt.width);
+                if (modelLeft < 0) {
                     this.truncatedLeft = true;
-                    if (this.modelWidth + this.modelLeft > this.rowsManager.gantt.width) {
+                    if (modelWidth + modelLeft > this.rowsManager.gantt.width) {
                         this.truncatedRight = true;
                         this.width = this.rowsManager.gantt.width;
                     } else {
                         this.truncatedRight = false;
-                        this.width = this.modelWidth + this.modelLeft;
+                        this.width = modelWidth + modelLeft;
                     }
-                } else if (this.modelWidth + this.modelLeft > this.rowsManager.gantt.width) {
+                } else if (modelWidth + modelLeft > this.rowsManager.gantt.width) {
                     this.truncatedRight = true;
                     this.truncatedLeft = false;
-                    this.width = this.rowsManager.gantt.width - this.modelLeft;
+                    this.width = this.rowsManager.gantt.width - modelLeft;
                 } else {
                     this.truncatedLeft = false;
                     this.truncatedRight = false;
-                    this.width = this.modelWidth;
+                    this.width = modelWidth;
                 }
 
                 if (this.width < 0) {
@@ -3032,8 +3058,8 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
             this.updateView();
             if (!this.rowsManager.gantt.isRefreshingColumns &&
-                (oldModelLeft !== this.modelLeft ||
-                oldModelWidth !== this.modelWidth ||
+                (oldViewLeft !== this.left ||
+                oldViewWidth !== this.width ||
                 oldTruncatedRight !== this.truncatedRight ||
                 oldTruncatedLeft !== this.truncatedLeft)) {
                 this.rowsManager.gantt.api.tasks.raise.viewChange(this);
@@ -3055,7 +3081,6 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                     }
 
                     this.$element.toggleClass('gantt-task-milestone', this.isMilestone());
-                    this.$element.toggleClass('gantt-task', !this.isMilestone());
                 }
             }
         };
@@ -3769,9 +3794,6 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
             this.children = function(row) {
                 var children = idToChildren[row.model.id];
-                if (children === undefined) {
-                    children = nameToChildren[row.model.name];
-                }
                 return children;
             };
 
@@ -3792,9 +3814,6 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
             this.parent = function(row) {
                 var parent = idToParent[row.model.id];
-                if (parent === undefined) {
-                    parent = nameToParent[row.model.name];
-                }
                 return parent;
             };
 
@@ -3881,7 +3900,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
 
 (function(){
     'use strict';
-    angular.module('gantt').filter('ganttTaskLimit', [function() {
+    angular.module('gantt').filter('ganttTaskLimit', ['moment', function(moment) {
         // Returns only the tasks which are visible on the screen
         // Use the task width and position to decide if a task is still visible
 
@@ -3893,11 +3912,11 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             var toDate = gantt.options.value('toDate');
 
             if (firstColumn !== undefined && lastColumn !== undefined) {
-                if (fromDate === undefined) {
+                if (!fromDate || (moment.isMoment(fromDate) && !fromDate.isValid())) {
                     fromDate = firstColumn.date;
                 }
 
-                if (toDate === undefined) {
+                if (!toDate || (moment.isMoment(toDate) && !toDate.isValid())) {
                     toDate = lastColumn.endDate;
                 }
 
@@ -4272,6 +4291,37 @@ Github: https://github.com/angular-gantt/angular-gantt.git
             }
         };
     });
+}());
+
+
+(function(){
+    'use strict';
+    angular.module('gantt').directive('ganttElementHeightListener', [function() {
+        return {
+            restrict: 'A',
+            controller: ['$scope', '$element', '$attrs', function($scope, $element, $attrs) {
+                var scopeVariable = $attrs.ganttElementHeightListener;
+                if (scopeVariable === '') {
+                    scopeVariable = 'ganttElementHeight';
+                }
+
+                var effectiveScope = $scope;
+
+                while(scopeVariable.indexOf('$parent.') === 0) {
+                    scopeVariable = scopeVariable.substring('$parent.'.length);
+                    effectiveScope = effectiveScope.$parent;
+                }
+
+                effectiveScope.$watch(function() {
+                    return $element[0].offsetHeight;
+                }, function(newValue) {
+                    if (newValue > 0) {
+                        effectiveScope[scopeVariable] = newValue;
+                    }
+                });
+            }]
+        };
+    }]);
 }());
 
 
@@ -4686,6 +4736,7 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                             },
                             post: function postLink(scope, iElement, iAttrs, controller) {
                                 scope.gantt.api.directives.raise.postLink(directiveName, scope, iElement, iAttrs, controller);
+
                             }
                         };
                     },
@@ -4696,9 +4747,13 @@ Github: https://github.com/angular-gantt/angular-gantt.git
                             controllerFunction($scope, $element, $attrs, controller);
                         }
 
-                        $scope.gantt.api.directives.raise.new(directiveName, $scope, $element, $attrs, controller);
+                        $scope.gantt.api.directives.raise.controller(directiveName, $scope, $element, $attrs, controller);
                         $scope.$on('$destroy', function() {
                             $scope.gantt.api.directives.raise.destroy(directiveName, $scope, $element, $attrs, controller);
+                        });
+
+                        $scope.$evalAsync(function() {
+                            $scope.gantt.api.directives.raise.new(directiveName, $scope, $element, $attrs, controller);
                         });
                     }]
                 };
@@ -5012,7 +5067,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '        </div>\n' +
         '    </gantt-side>\n' +
         '    <gantt-scrollable-header>\n' +
-        '        <gantt-header>\n' +
+        '        <gantt-header gantt-element-height-listener="$parent.ganttHeaderHeight">\n' +
         '            <gantt-header-columns>\n' +
         '                <div ng-repeat="header in gantt.columnsManager.visibleHeaders track by $index">\n' +
         '                    <div class="gantt-header-row" ng-class="{\'gantt-header-row-last\': $last, \'gantt-header-row-first\': $first}">\n' +
@@ -5067,7 +5122,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '\n' +
         '    <!-- Side template -->\n' +
         '    <script type="text/ng-template" id="template/ganttSide.tmpl.html">\n' +
-        '        <div ng-transclude class="gantt-side"></div>\n' +
+        '        <div ng-transclude class="gantt-side" style="width: auto;"></div>\n' +
         '    </script>\n' +
         '\n' +
         '    <!-- Side content template-->\n' +
@@ -5102,7 +5157,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '    </script>\n' +
         '\n' +
         '    <script type="text/ng-template" id="template/ganttColumn.tmpl.html">\n' +
-        '        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{\'gantt-column-last\': $last, \'gantt-column-first\': $first}"></div>\n' +
+        '        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{\'gantt-column-last\': $last, \'gantt-column-first\': $first, \'gantt-column-day-end\': column.timeFrames[0].start.get(\'date\') !== column.timeFrames[0].end.get(\'date\')}"></div>\n' +
         '    </script>\n' +
         '\n' +
         '    <script type="text/ng-template" id="template/ganttTimeFrame.tmpl.html">\n' +
@@ -5125,7 +5180,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '\n' +
         '    <!-- Timespan template -->\n' +
         '    <script type="text/ng-template" id="template/ganttTimespan.tmpl.html">\n' +
-        '        <div class="gantt-timespan" ng-class="timespan.classes">\n' +
+        '        <div class="gantt-timespan" ng-class="timespan.model.classes">\n' +
         '        </div>\n' +
         '    </script>\n' +
         '\n' +
@@ -5174,7 +5229,8 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '             ng-class="row.model.classes"\n' +
         '             ng-class-odd="\'gantt-row-odd\'"\n' +
         '             ng-class-even="\'gantt-row-even\'"\n' +
-        '             ng-style="{\'height\': row.model.height}">\n' +
+        '             ng-style="{\'height\': row.model.height}"\n' +
+        '             ng-class="{\'gantt-row-group\': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">\n' +
         '            <div ng-transclude class="gantt-row-content"></div>\n' +
         '        </div>\n' +
         '    </script>\n' +
@@ -5182,12 +5238,8 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '    <!-- Side background template -->\n' +
         '    <script type="text/ng-template" id="template/ganttSideBackground.tmpl.html">\n' +
         '        <div class="gantt-side-background">\n' +
-        '            <div class="gantt-side-background-header">\n' +
-        '                <div ng-show="gantt.columnsManager.columns.length > 0 && gantt.columnsManager.headers.length > 0">\n' +
-        '                    <div ng-repeat="header in gantt.columnsManager.headers">\n' +
-        '                        <div class="gantt-row-height" ng-class="{\'gantt-labels-header-row\': $last, \'gantt-labels-header-row-last\': $last}"></div>\n' +
-        '                    </div>\n' +
-        '                </div>\n' +
+        '            <div class="gantt-side-background-header" ng-style="{height: $parent.ganttHeaderHeight + \'px\'}">\n' +
+        '                <div class="gantt-header-row gantt-side-header-row"></div>\n' +
         '            </div>\n' +
         '            <div class="gantt-side-background-body" ng-style="getMaxHeightCss()">\n' +
         '                <div gantt-vertical-scroll-receiver>\n' +
@@ -5198,7 +5250,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '                         ng-repeat="row in gantt.rowsManager.visibleRows track by row.model.id"\n' +
         '                         ng-style="{\'height\': row.model.height}">\n' +
         '                        <div gantt-row-label class="gantt-row-label gantt-row-background"\n' +
-        '                             ng-style="{\'background-color\': row.model.color}">\n' +
+        '                             ng-style="{\'background-color\': row.model.color}" ng-class="{\'gantt-row-group\': gantt.rowsManager.visibleRows[$index].model.center.group.id !== gantt.rowsManager.visibleRows[$index + 1].model.center.group.id}">\n' +
         '                        </div>\n' +
         '                    </div>\n' +
         '                </div>\n' +
