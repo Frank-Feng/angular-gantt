@@ -5157,7 +5157,7 @@ angular.module('gantt.templates', []).run(['$templateCache', function($templateC
         '    </script>\n' +
         '\n' +
         '    <script type="text/ng-template" id="template/ganttColumn.tmpl.html">\n' +
-        '        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{\'gantt-column-last\': $last, \'gantt-column-first\': $first, \'gantt-column-day-end\': $scope.column.timeFrames[0].start.get(\'hour\') == 8}"></div>\n' +
+        '        <div ng-transclude class="gantt-column gantt-foreground-col" ng-class="{\'gantt-column-last\': $last, \'gantt-column-first\': $first, \'gantt-column-day-end\': column.timeFrames[0].start.get(\'hour\') == 8}"></div>\n' +
         '    </script>\n' +
         '\n' +
         '    <script type="text/ng-template" id="template/ganttTimeFrame.tmpl.html">\n' +
